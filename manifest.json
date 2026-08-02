@@ -1,0 +1,75 @@
+{
+  "id": "@ryu/healing",
+  "name": "Self-Healing",
+  "version": "1.0.0",
+  "description": "Self-healing: failed runs are diagnosed by a Gateway side-model and proposed fixes are delivered to the approvals inbox for human review before they apply.",
+  "surfaces": {
+    "gateway": { "support": "none" },
+    "core": { "support": "full" },
+    "desktop": { "support": "full" },
+    "island": { "support": "full" },
+    "mobile": { "support": "full" },
+    "extension": { "support": "full" },
+    "web": { "support": "full" },
+    "cli": { "support": "full" }
+  },
+  "engines": {
+    "ryu": ">=0.0.1"
+  },
+  "runnables": [],
+  "requires": {
+    "apps": [
+      {
+        "id": "@ryu/approvals",
+        "min_version": "1.0.0"
+      }
+    ]
+  },
+  "sidecars": [
+    {
+      "name": "ryu-healing",
+      "process": {
+        "kind": "local",
+        "command": "ryu-healing",
+        "command_env": "RYU_HEALING_BIN",
+        "port_env": "RYU_HEALING_PORT"
+      },
+      "port": 8001,
+      "health_path": "/health",
+      "http": {
+        "mount": "/api/healing",
+        "public_mount": "/api/healing",
+        "routes": [{ "path": "/config" }, { "path": "/status" }]
+      }
+    }
+  ],
+  "permission_grants": [],
+  "contributes": {
+    "hook_events": [
+      {
+        "id": "@ryu/healing#diagnosis.ready",
+        "title": "Fix diagnosed",
+        "description": "A failed run was diagnosed by the side model and a fix was resolved. Fires once per heal attempt, BEFORE the fix is acted on, whether `auto_apply` is true (the run is about to be retried automatically) or false (the fix went to the approvals inbox instead). It does NOT fire when healing is off, when the attempt was suppressed by the cap/cooldown, or when the model returned nothing. `corrected_prompt` is null for a workflow, which is retried from scratch rather than with a rewritten instruction.",
+        "payload_example": {
+          "source_id": "conv_9f2c1ab4",
+          "kind": "agent",
+          "agent_id": "researcher",
+          "diagnosis": "The run failed because the search tool was called with an empty query.",
+          "corrected_prompt": "Search for the 2024 filing, passing the company name as the query.",
+          "auto_apply": false
+        }
+      },
+      {
+        "id": "@ryu/healing#attempts.exhausted",
+        "title": "Auto-fix gave up",
+        "description": "Self-healing hit its per-source attempt cap and gave up on this run: no further fix is diagnosed or proposed for it, and a terminal review item is queued instead. Fires at most once per source — a later failure on the same source is dropped as 'already given up' — so this is the event to hang an escalation on.",
+        "payload_example": {
+          "source_id": "conv_9f2c1ab4",
+          "kind": "agent",
+          "attempts": 2,
+          "note": "It failed after 2 auto-fix attempt(s). Review it manually."
+        }
+      }
+    ]
+  }
+}
