@@ -1,0 +1,53 @@
+[package]
+name = "ryu-healing"
+version = "0.1.6"
+edition = "2021"
+license = "Apache-2.0"
+description = "Self-healing loop for failed runs: the out-of-process `@ryu/healing` app backend (the diagnose→propose engine + decision logic + `/api/healing/*` HTTP surface). Ships as its own `ryu-healing` sidecar binary; Core links no code from it, only the shared `ryu-healing-contracts` verdict. The Gateway diagnosis call, the agent/workflow re-run, and the approvals inbox are inverted through the `HealingHost` trait so this crate has ZERO dependency on apps/core."
+repository = "https://github.com/amajorai/ryu"
+
+# The out-of-process sidecar binary — the ONLY way this crate reaches a user. Core
+# spawns it (`kind: local`, sibling on PATH / `RYU_HEALING_BIN`), health-checks it,
+# and drives it on loopback: Core POSTs a failed run's context to
+# `/api/healing/report-failure` and applies the returned verdict (Core owns the
+# welded approvals write + agent/workflow re-run), while the public
+# `/api/healing/config|status` surface is served through the manifest
+# `public_mount`. Core does NOT link this crate as a lib: the only Rust the two
+# halves share is the `ryu-healing-contracts` wire contract below, which both link.
+[[bin]]
+name = "ryu-healing"
+path = "src/main.rs"
+
+# Versions are matched to apps/core/Cargo.toml so the two processes agree on every
+# shared payload shape. This crate has ZERO dependency on apps/core.
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+async-trait = "0.1"
+tracing = "0.1"
+# Sidecar-binary-only deps (data-dir resolution + Gateway HTTP + logging), mirroring
+# `ryu-quests` / `ryu-mail`. Core already pulls all of these, so the in-process build
+# gains no new dependency.
+reqwest = { version = "0.12", features = ["json"] }
+dirs = "5"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# App events (`contributes.hook_events` in this app's manifest): the engine raises
+# `diagnosis.ready` / `attempts.exhausted` so a plugin hook or workflow can react to
+# a heal without healing knowing anything about it. Emitting is best-effort and
+# no-ops when the process is not Core-hosted, which is exactly what the in-process
+# build inside Core is — there the events are raised by the spawned sidecar, which
+# is the process Core actually drives via `POST /api/healing/report-failure`.
+ryu-app-events = { path = "../crates/core/app-events", version = "0.1.6" }
+# The Core↔sidecar wire contract: `HealVerdict` (what `/report-failure` answers with)
+# plus the two out-of-band agreements — the `healrun_` never-heal-a-heal prefix and
+# the context-truncation policy. Both processes link this crate and neither links the
+# other, which is what lets Core drop its path dep on this one. `version` as well as
+# `path` because the satellite tree (amajorai/ryu-healing) has no sibling `crates/`
+# and resolves it from crates.io — same shape as `ryu-app-events` above.
+ryu-healing-contracts = { path = "../crates/core/healing-contracts", version = "0.1.6" }
