@@ -1,0 +1,18 @@
+[package]
+name = "ryu-healing-contracts"
+version = "0.1.13"
+edition = "2021"
+license = "Apache-2.0"
+description = "Shared wire contract for the Ryu self-healing loop: the `HealVerdict` action enum the out-of-process `ryu-healing` sidecar returns to Core, plus the two constants both sides must agree on out-of-band (the `healrun_` never-heal-a-heal prefix and the context-truncation policy). Dep-light (serde only) and with ZERO dependency on apps/core, so Core and the sidecar can both link it without either linking the other."
+repository = "https://github.com/amajorai/ryu"
+
+# serde ONLY, on purpose. The verdict carries no `ToSchema` derives (the sidecar's
+# `#[utoipa::path]` declares a `serde_json::Value` body) and no `DateTime`, so
+# neither `utoipa` nor `chrono` belongs here. Keeping the dep set at one crate is
+# what lets Core link this without inheriting `axum`/`reqwest`/`tokio`/`uuid` from
+# the sidecar crate.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
